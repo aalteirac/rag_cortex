@@ -28,7 +28,6 @@ def init(dbname,scname,stname,st,pc):
         if 'init' not in st.session_state:
             res=checkUDFExist(dbname,scname,"CHUNK_TEXT")
             return res
-
         
 def checkStage(dbname,scname,stname):
     session=getSession()

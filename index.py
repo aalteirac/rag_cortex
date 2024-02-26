@@ -27,7 +27,7 @@ def uploadPDF(file):
     with open(os.path.join(os.getcwd()+"/temp",file.name),"wb") as f:
       f.write(file.getbuffer())         
     setContext(DB_NAME,SCH_NAME)
-    put_result = session.file.put("temp/"+file.name, "@"+STAGE_NAME, source_compression="NONE",auto_compress=False)
+    put_result = session.file.put(os.path.join(os.getcwd()+"/temp",file.name), "@"+STAGE_NAME, source_compression="NONE",auto_compress=False)
 
 def listFiles(file):
     setContext(DB_NAME,SCH_NAME)
