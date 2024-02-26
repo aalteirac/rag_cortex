@@ -27,12 +27,6 @@ def init(dbname,scname,stname,st,pc):
             res=checkUDFExist(dbname,scname,"CHUNK_TEXT")
             return res
 
-def saveFile(uploaded):
-    with open(os.path.join(os.getcwd(),uploaded.name),"w") as f:
-        strIo= StringIO(uploaded.getvalue().decode("utf-8"))
-        f.write(strIo.read())
-        return os.path.join(os.getcwd(),uploaded.name)
-        
 def checkStage(dbname,scname,stname):
     session=getSession()
     return len(session.sql("SHOW STAGES LIKE '%"+stname+"%' in SCHEMA " +dbname+"."+scname).collect())>0
