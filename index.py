@@ -197,7 +197,8 @@ def main():
     else:
         st.session_state['newfile']=False   
     if up is not None:
-        if st.session_state['newfile']==True :  
+        if st.session_state['newfile']==True : 
+            stats.info("Uploading file...") 
             uploadPDF(up)
             stats.success("File Uploaded...")
             listFiles(up.name)
