@@ -7,7 +7,7 @@ import json
 def getSession():
     config = configparser.ConfigParser()
     config.read("secrets.toml")
-    session = Session.builder.configs(dict(st.secrets.snow)).create() 
+    session = Session.builder.configs(dict({"user":st.secrets['user'],"password":st.secrets['password'],'account':st.secrets['account'],"role":st.secrets['role'],"warehouse":st.secrets['warehouse']})).create() 
     return session
 
 def getSavedScenario():
