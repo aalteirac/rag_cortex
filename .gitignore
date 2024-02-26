@@ -112,3 +112,5 @@ cookiecutter-pypackage-env/
 .streamlit/secretsnow.toml
 rsa_key.p8
 rsa_key.pub
+
+temp/

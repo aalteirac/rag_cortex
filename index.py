@@ -15,34 +15,27 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 st.set_page_config(layout='wide',initial_sidebar_state='collapsed')
 session=lib.getSession()
+DB_NAME='KEBOOLA_APP_DB'
+SCH_NAME="KEBOOLA_APP_SC"
+STAGE_NAME="KEBOOLA_INPUT_FILE_ST"
+
+def setContext(db,sc):
+     session.use_database(db)
+     session.use_schema(sc)
 
 def uploadPDF(file):
     with open(os.path.join("temp",file.name),"wb") as f: 
       f.write(file.getbuffer())         
-    session.use_database('CORTEX_APP_DB')
-    session.use_schema("CORTEX_APP_SC")
-    put_result = session.file.put("temp/"+file.name, "@INPUT_FILE", source_compression="NONE",auto_compress=False)
+    setContext(DB_NAME,SCH_NAME)
+    put_result = session.file.put("temp/"+file.name, "@"+STAGE_NAME, source_compression="NONE",auto_compress=False)
 
 def listFiles(file):
-    session.use_database('CORTEX_APP_DB')
-    session.use_schema("CORTEX_APP_SC")
+    setContext(DB_NAME,SCH_NAME)
     r= len(session.sql(f'''
-        select RELATIVE_PATH  from directory(@INPUT_FILE) where RELATIVE_PATH='{file}';
+        select RELATIVE_PATH  from directory(@{STAGE_NAME}) where RELATIVE_PATH='{file}';
     ''').collect())>0
-    session.sql("ALTER STAGE INPUT_FILE REFRESH").collect()
+    session.sql("ALTER STAGE "+STAGE_NAME+" REFRESH").collect()
     return r
-    # if r==False:
-    #       time.sleep(1)
-    #       listFiles(file)
-    #       stats.write('WAITING... ' + datetime.now().strftime("%H:%M:%S")) 
-    # else:
-    #     return True            
-    # return len(session.sql(f'''
-    # LIST @INPUT_FILE PATTERN='.*{file}.*'
-    # ''').collect())>0
-
-def checkUDFExist(name):
-    return len(session.sql("SHOW USER FUNCTIONS LIKE '%"+name+"%' ").collect())
 
 class chunker:
     def process(self,text):        
@@ -70,17 +63,16 @@ def readpdf(file_path):
     return whole_text
 
 def registerUDF():
-    session.use_database('CORTEX_APP_DB')
-    session.use_schema("CORTEX_APP_SC")
+    setContext(DB_NAME,SCH_NAME)
     session.udf.register(
-        func = readpdf
-        , return_type = StringType()
-        , input_types = [StringType()]
-        , is_permanent = True
-        , name = 'GET_PDF_TEXT'
-        , replace = True
-        , packages=['snowflake-snowpark-python','pypdf2']
-        , stage_location = 'CORTEX_APP_DB.CORTEX_APP_SC.INPUT_FILE')
+        func = readpdf,
+        return_type = StringType(),
+        input_types = [StringType()],
+        is_permanent = True,
+        name = 'GET_PDF_TEXT',
+        replace = True,
+        packages=['snowflake-snowpark-python','pypdf2'],
+        stage_location = f'''{DB_NAME}.{SCH_NAME}.{STAGE_NAME}''')
     schema = StructType([
         StructField("chunk", StringType()),
         StructField("meta", StringType()),
@@ -93,11 +85,10 @@ def registerUDF():
         name = 'CHUNK_TEXT' , 
         replace = True , 
         packages=['pandas','langchain'], 
-        stage_location = 'CORTEX_APP_DB.CORTEX_APP_SC.INPUT_FILE')
+        stage_location = f'''{DB_NAME}.{SCH_NAME}.{STAGE_NAME}''')
 
 def chunktable():
-    session.use_database('CORTEX_APP_DB')
-    session.use_schema("CORTEX_APP_SC")
+    setContext(DB_NAME,SCH_NAME)
     session.sql(f'''
         CREATE OR REPLACE TABLE CHUNK_TEXT AS
             SELECT
@@ -108,20 +99,18 @@ def chunktable():
     ''').collect()
 
 def file2table():
-    session.use_database('CORTEX_APP_DB')
-    session.use_schema("CORTEX_APP_SC")
+    setContext(DB_NAME,SCH_NAME)
     session.sql(f'''
     CREATE OR REPLACE TABLE RAW_TEXT AS
         SELECT
             relative_path
             , file_url
-            , GET_PDF_TEXT(build_scoped_file_url(@INPUT_FILE, relative_path)) as raw_text
-        from directory(@INPUT_FILE);
+            , GET_PDF_TEXT(build_scoped_file_url(@{STAGE_NAME}, relative_path)) as raw_text
+        from directory(@{STAGE_NAME});
     ''').collect()
 
 def vectorize():
-    session.use_database('CORTEX_APP_DB')
-    session.use_schema("CORTEX_APP_SC")
+    setContext(DB_NAME,SCH_NAME)
     session.sql(f'''
     CREATE OR REPLACE TABLE VECTOR_STORE AS
         SELECT
@@ -134,21 +123,20 @@ def vectorize():
 
 def prompt(text,rag=True):
     text=text.replace("'",' ')
-    session.use_database('CORTEX_APP_DB')
-    session.use_schema("CORTEX_APP_SC")
+    setContext(DB_NAME,SCH_NAME)
     if rag==True:
         return session.sql(f'''
         SELECT snowflake.cortex.complete(
-        'llama2-70b-chat', 
+        'llama2-70b-chat',  
         CONCAT( 
-            'Answer the question based on the context. Be concise.','Context: ',
+            'Answer the question based on the context.','Context: ',
             (
                 SELECT chunk FROM VECTOR_STORE 
                 ORDER BY vector_l2_distance(
                 snowflake.cortex.embed_text('e5-base-v2', 
                 '{text}'
                 ), chunk_embedding
-                ) LIMIT 2
+                ) LIMIT 1
             ),
             'Question: ', 
             '{text}',
@@ -183,24 +171,25 @@ def chat_actions(ans,res):
 
 def initialize(pc):
     # setUI()
+    pc.empty()
     if 'init' not in st.session_state:
-        res=checkUDFExist("CHUNK_TEXT")
+        pc.info("CHECKING UDF...")
+        res=lib.checkUDFExist(DB_NAME,SCH_NAME,"CHUNK_TEXT")
         if res==0:
             pc.info("INSTALLING UDF...")
             registerUDF()
             pc.success("UDF SUCCESSFULY INSTALLED!")
-        else:
-            pc.success("UDF ALREADY INSTALLED!")
-        time.sleep(4)
+        pc.success("DEMO IS READY!!!")
+        time.sleep(2)
         pc.empty()
         st.session_state['init']=True    
 
 def main():
     image_path = os.path.dirname(os.path.abspath(__file__))
     st.image(image_path+'/img/both.png',use_column_width='always')
-
     stats=st.empty()
-    initialize(stats)
+    res=lib.init(DB_NAME,SCH_NAME,STAGE_NAME,st,stats)
+    initialize(stats)   
     up=st.file_uploader('Upload a PDF to augment LLM...',['pdf'])
     if up is not None and st.session_state.get('curfile')!=up.name:
         st.session_state['curfile']=up.name
@@ -220,7 +209,7 @@ def main():
             stats.success("Vectorized...")
             time.sleep(2)
             stats.empty()  
-    adv=st.checkbox("Use RAG?",value=True)  
+    adv=st.checkbox("Use RAG?",value=False)  
     if adv==True: pre="RAG ACTIVATED" 
     else: pre="RAG DEACTIVATED"
 
