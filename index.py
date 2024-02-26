@@ -199,6 +199,7 @@ def main():
     if up is not None:
         if st.session_state['newfile']==True :  
             uploadPDF(up)
+            lib.saveFile(up)
             stats.success("File Uploaded...")
             listFiles(up.name)
             file2table()
