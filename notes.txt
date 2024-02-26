@@ -1,0 +1,81 @@
+Dockerize the streamlit app
+docker build -t rag_cortex .
+
+WITH ACCOUNTADMIN
+create a ROLE for SPCS usage
+CREATE ROLE IF NOT EXISTS SPCS_RL;
+
+create a user
+CREATE USER  IF NOT EXISTS SPCS_USR PASSWORD='abc123' DEFAULT_ROLE = SPCS_RL DEFAULT_SECONDARY_ROLES = ('ALL') MUST_CHANGE_PASSWORD = FALSE;
+
+grant user with this ROLE
+GRANT ROLE SPCS_RL TO USER SPCS_USR; 
+
+grant DB creation to this ROLE
+GRANT CREATE DATABASE ON ACCOUNT TO ROLE SPCS_RL;
+
+create egress rule to open everything
+CREATE OR REPLACE NETWORK RULE allow_all_rule
+  TYPE = 'HOST_PORT'
+  MODE= 'EGRESS'
+  VALUE_LIST = ('0.0.0.0:443','0.0.0.0:80');
+
+create external intgeration
+CREATE OR REPLACE EXTERNAL ACCESS INTEGRATION all_open
+  ALLOWED_NETWORK_RULES = (allow_all_rule)
+  ENABLED = true;
+
+grant INTEGRATION to the SPCS ROLE
+GRANT USAGE ON INTEGRATION all_open TO ROLE SPCS_RL;  
+
+WITH SPCS_RL
+create DB/SCHEMA/STAGE for the app 
+CREATE STAGE IMG_STAGE DIRECTORY = ( ENABLE = true );
+
+create the image registry
+CREATE OR REPLACE IMAGE REPOSITORY IMG_REPO;
+
+login to snowflake to push image
+docker login sfsenorthamerica-eu-demo-169.registry.snowflakecomputing.com/uc_tracking_app_db/uc_tracking_app_sc/img_repo/ -u aalteirac
+
+tag the image
+docker tag rag_cortex sfsenorthamerica-eu-demo-169.registry.snowflakecomputing.com/uc_tracking_app_db/uc_tracking_app_sc/img_repo/rag_cortex:v0
+
+push the image
+docker push sfsenorthamerica-eu-demo-169.registry.snowflakecomputing.com/uc_tracking_app_db/uc_tracking_app_sc/img_repo/rag_cortex:v0
+
+upload yaml
+
+create compute pool
+CREATE COMPUTE POOL rag_cortex_compute_pool
+  MIN_NODES = 1
+  MAX_NODES = 1
+  INSTANCE_FAMILY = STANDARD_1;
+
+create service
+CREATE SERVICE cortex_rag_service
+  IN COMPUTE POOL rag_cortex_compute_pool
+  FROM @IMG_STAGE
+  SPEC='rag_cortex_spec.yaml'
+  MIN_INSTANCES=1
+  MAX_INSTANCES=1
+  EXTERNAL_ACCESS_INTEGRATIONS = (ALL_OPEN);
+
+
+## SINGLE SCRIPT
+USE ROLE ACCOUNTADMIN;
+CREATE ROLE IF NOT EXISTS SPCS_RL;
+CREATE USER  IF NOT EXISTS SPCS_USR PASSWORD='abc123' DEFAULT_ROLE = SPCS_RL DEFAULT_SECONDARY_ROLES = ('ALL') MUST_CHANGE_PASSWORD = FALSE;
+GRANT ROLE SPCS_RL TO USER SPCS_USR; 
+GRANT CREATE DATABASE ON ACCOUNT TO ROLE SPCS_RL;
+CREATE OR REPLACE NETWORK RULE allow_all_rule
+  TYPE = 'HOST_PORT'
+  MODE= 'EGRESS'
+  VALUE_LIST = ('0.0.0.0:443','0.0.0.0:80');
+CREATE OR REPLACE EXTERNAL ACCESS INTEGRATION all_open
+  ALLOWED_NETWORK_RULES = (allow_all_rule)
+  ENABLED = true;  
+GRANT USAGE ON INTEGRATION all_open TO ROLE SPCS_RL;    
+
+USE ROLE SPCS_RL;
+

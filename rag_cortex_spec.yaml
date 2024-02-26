@@ -1,0 +1,18 @@
+spec:
+  container:
+  - name: ragcortex
+    image: /uc_tracking_app_db/uc_tracking_app_sc/img_repo/rag_cortex:v0
+    # volumeMounts:
+    #   - name: weights
+    #     mountPath: /usr/src/app/weights
+    #   - name: datadb
+    #     mountPath: /data/db/
+  endpoint:
+  - name: ui
+    port: 8600
+    public: true
+  # volumes:
+  # - name: weights
+  #   source: "@weights"
+  # - name: datadb
+  #   source: "@datadb"
