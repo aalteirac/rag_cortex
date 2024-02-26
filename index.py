@@ -196,7 +196,8 @@ def initialize(pc):
         st.session_state['init']=True    
 
 def main():
-    st.image('img/both.png',use_column_width='always')
+    image_path = os.path.dirname(os.path.abspath(__file__))
+    st.image(image_path+'/img/both.png',use_column_width='always')
 
     stats=st.empty()
     initialize(stats)
